@@ -1,0 +1,19 @@
+{
+  "name": "nextstep-application-journal",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": ["frontend", "backend"],
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,green \"npm run dev -w backend\" \"npm run dev -w frontend\"",
+    "build": "npm run build -w frontend",
+    "start": "npm start -w backend",
+    "test": "npm test -w backend",
+    "test:ui": "node scripts/check-interface.mjs"
+  },
+  "engines": { "node": ">=22.12" },
+  "devDependencies": {
+    "concurrently": "^9.2.0",
+    "playwright": "^1.56.0",
+    "@axe-core/playwright": "^4.10.2"
+  }
+}

@@ -1,0 +1,9 @@
+node_modules/
+frontend/dist/
+coverage/
+*.log
+.DS_Store
+Thumbs.db
+# The assessment explicitly requires .env files. Use exam-only settings in them.
+.env.local
+**/.env.local

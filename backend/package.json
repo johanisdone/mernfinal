@@ -1,0 +1,22 @@
+{
+  "name": "@nextstep/backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/start.js",
+    "start": "node src/start.js",
+    "test": "node --test --test-concurrency=1 test/tracker.test.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "mongoose": "^8.19.0",
+    "dotenv": "^16.6.1",
+    "cors": "^2.8.5",
+    "helmet": "^8.1.0"
+  },
+  "devDependencies": {
+    "supertest": "^7.1.4",
+    "mongodb-memory-server": "^10.2.0"
+  }
+}
