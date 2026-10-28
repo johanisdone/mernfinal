@@ -90,3 +90,118 @@ test('Overdue is calculated from dates and calendar arithmetic crosses month and
   const detail = await request(app).get('/api/applications/' + result.body.data._id).expect(200);
   assert.equal(detail.body.data.isOverdue, true);
 });
+
+const created = async values => (await request(app).post('/api/applications').send({ ...sample(), ...values }).expect(201)).body.data;
+const move = (id, status, code = 200) => request(app).patch(`/api/applications/${id}/status`).send({ status }).expect(code);
+
+test('Every permitted workflow branch appends timestamped history; all final stages remain locked', async () => {
+  const routes = [
+    ['Rejected'], ['Interview', 'Rejected'], ['Interview', 'Offer', 'Accepted'], ['Interview', 'Offer', 'Declined']
+  ];
+  for (let index = 0; index < routes.length; index++) {
+    const item = await created({ jobRole: 'Workflow role ' + index });
+    let last;
+    for (const stage of routes[index]) last = (await move(item._id, stage)).body.data;
+    assert.deepEqual(last.statusHistory.map(event => event.status), ['Applied', ...routes[index]]);
+    assert.ok(last.statusHistory.every(event => Number.isFinite(Date.parse(event.changedAt))));
+    assert.deepEqual(last.nextStatuses, []);
+    await move(item._id, 'Applied', 400);
+    await move(item._id, 'Interview', 400);
+  }
+});
+
+test('Skipped, reverse, repeated, and client-forged status changes are rejected without changing history', async () => {
+  const item = await created();
+  for (const invalid of ['Applied', 'Offer', 'Accepted', 'Declined']) await move(item._id, invalid, 400);
+  await request(app).patch(`/api/applications/${item._id}/status`).send({ status: 'Interview', changedAt: '2000-01-01' }).expect(400);
+  await move(item._id, 'Interview');
+  await move(item._id, 'Applied', 400);
+  await move(item._id, 'Interview', 400);
+  await move(item._id, 'Offer');
+  await move(item._id, 'Rejected', 400);
+  const stored = await Application.findById(item._id);
+  assert.deepEqual(stored.statusHistory.map(event => event.status), ['Applied', 'Interview', 'Offer']);
+});
+
+test('Deletion is forbidden in Interview/Offer and allowed in Applied and every final stage', async () => {
+  const direct = await created();
+  await request(app).delete(`/api/applications/${direct._id}`).expect(200);
+  for (const [index, ending] of ['Rejected', 'Accepted', 'Declined'].entries()) {
+    const item = await created({ jobRole: `Delete role ${index}` });
+    if (ending === 'Rejected') await move(item._id, ending);
+    else {
+      await move(item._id, 'Interview');
+      await request(app).delete(`/api/applications/${item._id}`).expect(400);
+      await move(item._id, 'Offer');
+      await request(app).delete(`/api/applications/${item._id}`).expect(400);
+      await move(item._id, ending);
+    }
+    await request(app).delete(`/api/applications/${item._id}`).expect(200);
+  }
+  assert.equal(await Application.countDocuments(), 0);
+});
+
+test('Editing changes permitted values but cannot alter applied date, issued ID, status, or history', async () => {
+  const item = await created();
+  const result = (await request(app).patch(`/api/applications/${item._id}`).send({ companyName: 'Acme Labs', jobRole: 'Junior Engineer', jobType: 'Contract', notes: 'Changed contact.', expectedSalary: null }).expect(200)).body.data;
+  assert.equal(result.companyName, 'Acme Labs');
+  assert.equal(result.applicationId, item.applicationId);
+  assert.equal(result.appliedDate, item.appliedDate);
+  assert.equal(result.followUpDate, item.followUpDate);
+  assert.equal(result.expectedSalary, null);
+  assert.equal(result.statusHistory.length, 1);
+  for (const changes of [{ appliedDate: '2000-01-01' }, { applicationId: 'JA-FAK-900' }, { status: 'Accepted' }, { statusHistory: [] }, { followUpDate: '2000-01-01' }]) {
+    await request(app).patch(`/api/applications/${item._id}`).send(changes).expect(400);
+  }
+});
+
+test('Active duplicate edits fail; finalizing a record permits a fresh application with a higher sequence', async () => {
+  const first = await created();
+  const second = await created({ jobRole: 'Backend Engineer' });
+  await request(app).patch(`/api/applications/${second._id}`).send({ jobRole: 'FRONTEND DEVELOPER' }).expect(409);
+  await move(first._id, 'Rejected');
+  const fresh = await created();
+  assert.ok(Number(fresh.applicationId.slice(-3)) > Number(first.applicationId.slice(-3)));
+  assert.equal(fresh.status, 'Applied');
+  await request(app).patch(`/api/applications/${first._id}`).send({ notes: 'Final records remain editable.' }).expect(200);
+});
+
+test('Past applications lose overdue status after leaving Applied; follow-up day itself is not overdue', async () => {
+  const old = await created({ appliedDate: '2020-01-01' });
+  assert.equal((await move(old._id, 'Interview')).body.data.isOverdue, false);
+  const sevenDaysAgo = new Date(currentDay() + 'T00:00:00Z');
+  sevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 7);
+  const dueToday = await created({ jobRole: 'Due today role', appliedDate: sevenDaysAgo.toISOString().slice(0, 10) });
+  assert.equal(dueToday.followUpDate, currentDay());
+  assert.equal(dueToday.isOverdue, false);
+});
+
+test('Concurrent status changes preserve a valid timeline without lost or duplicate events', async () => {
+  const item = await created();
+  const results = await Promise.all([
+    request(app).patch(`/api/applications/${item._id}/status`).send({ status: 'Interview' }),
+    request(app).patch(`/api/applications/${item._id}/status`).send({ status: 'Rejected' })
+  ]);
+  const stored = await Application.findById(item._id);
+  assert.ok(results.some(result => result.status === 200));
+  // If the second operation reads after the first, Interview -> Rejected is valid.
+  assert.equal(stored.statusHistory.length, 1 + results.filter(result => result.status === 200).length);
+  assert.notEqual(stored.statusHistory[0].status, stored.statusHistory[1].status);
+});
+
+test('Missing IDs, malformed JSON, and exhausted company numbers use consistent error envelopes', async () => {
+  await request(app).get('/api/applications/not-valid').expect(400);
+  const missing = new mongoose.Types.ObjectId();
+  for (const method of ['get', 'patch', 'delete']) {
+    let operation = request(app)[method](`/api/applications/${missing}`);
+    if (method === 'patch') operation = operation.send({ notes: 'Missing record.' });
+    const result = await operation.expect(404);
+    assert.equal(result.body.success, false);
+    assert.equal(result.body.data, null);
+  }
+  await CompanyCounter.create({ _id: 'infosys', value: 999 });
+  const exhausted = await request(app).post('/api/applications').send(sample()).expect(409);
+  assert.match(exhausted.body.message, /exhausted/);
+  const malformed = await request(app).post('/api/applications').set('Content-Type', 'application/json').send('{').expect(400);
+  assert.deepEqual(Object.keys(malformed.body).sort(), ['data', 'message', 'success']);
+});
