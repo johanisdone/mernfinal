@@ -1,0 +1,21 @@
+{
+  "runAt": "2026-10-28T04:38:10.335Z",
+  "database": "isolated MongoDB 8.2.6 (not Atlas)",
+  "checks": [
+    "Workspace retrieves all six status counts and persisted application cards.",
+    "Backend status filtering, company search, and overdue display work.",
+    "Client validation prevents empty save; a valid application persists through the frontend.",
+    "Prefilled editing changes allowed fields and keeps the applied date disabled."
+  ],
+  "scans": [
+    {
+      "screen": "01-workspace-desktop.png",
+      "violations": []
+    },
+    {
+      "screen": "02-application-form.png",
+      "violations": []
+    }
+  ],
+  "errors": []
+}
