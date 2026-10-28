@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import { fileURLToPath } from 'node:url';
 import { makeServer } from './server.js';
+import { prepareIndexes } from './models/Application.js';
 
 dotenv.config({ path: fileURLToPath(new URL('../.env', import.meta.url)) });
 
@@ -12,6 +13,7 @@ async function launch() {
   }
   new Intl.DateTimeFormat('en-CA', { timeZone: process.env.APP_TIMEZONE || 'Asia/Kolkata' }).format(new Date());
   await mongoose.connect(uri, { serverSelectionTimeoutMS: 12000 });
+  await prepareIndexes();
   const app = makeServer();
   const server = app.listen(Number(process.env.PORT || 5001), () => console.log(`NextStep ready on port ${process.env.PORT || 5001}`));
   const stop = () => server.close(async () => { await mongoose.disconnect(); });
