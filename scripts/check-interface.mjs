@@ -66,6 +66,7 @@ try {
     scans.push({ screen: name, violations: result.violations.map(item => ({ id: item.id, impact: item.impact, targets: item.nodes.map(node => node.target) })) });
     assert.deepEqual(serious.map(item => ({ id: item.id, targets: item.nodes.map(node => node.target) })), [], `Accessibility on ${name}`);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, `Horizontal overflow: ${name}`);
+    await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); });
     await page.screenshot({ path: fileURLToPath(new URL(name, screenshotFolder)), fullPage: true, animations: 'disabled' });
   }
 
@@ -102,6 +103,85 @@ try {
   await page.getByRole('button', { name: 'Save changes', exact: true }).click();
   await page.getByRole('heading', { name: 'Junior Developer', exact: true }).waitFor();
   checks.push('Prefilled editing changes allowed fields and keeps the applied date disabled.');
+
+  async function offeredOptions() {
+    return page.locator('#next-status option:not([disabled])').allTextContents();
+  }
+  assert.deepEqual(await offeredOptions(), ['Interview', 'Rejected']);
+  await page.getByLabel('Next status', { exact: true }).selectOption('Interview');
+  await page.getByRole('button', { name: 'Update status', exact: true }).click();
+  await page.getByText('2 events', { exact: true }).waitFor();
+  assert.deepEqual(await offeredOptions(), ['Offer', 'Rejected']);
+  const applicationId = (await Application.findById(addedId)).applicationId;
+  assert.equal(await page.getByRole('button', { name: `Delete ${applicationId}`, exact: true }).isDisabled(), true);
+  await page.getByLabel('Next status', { exact: true }).selectOption('Offer');
+  await page.getByRole('button', { name: 'Update status', exact: true }).click();
+  await page.getByText('3 events', { exact: true }).waitFor();
+  assert.deepEqual(await offeredOptions(), ['Accepted', 'Declined']);
+  assert.equal(await page.getByRole('button', { name: `Delete ${applicationId}`, exact: true }).isDisabled(), true);
+  await capture('03-stage-timeline.png');
+  checks.push('Only valid next statuses are offered; status changes persist with a visible timeline and disabled deletion in Interview/Offer.');
+  await page.getByLabel('Next status', { exact: true }).selectOption('Accepted');
+  await page.getByRole('button', { name: 'Update status', exact: true }).click();
+  await page.getByText('Final status · no further changes', { exact: true }).waitFor();
+  assert.equal(await page.locator('#next-status').count(), 0);
+  assert.deepEqual((await Application.findById(addedId)).statusHistory.map(event => event.status), ['Applied', 'Interview', 'Offer', 'Accepted']);
+  page.once('dialog', dialog => dialog.dismiss());
+  await page.getByRole('button', { name: `Delete ${applicationId}`, exact: true }).click();
+  assert.ok(await Application.findById(addedId));
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: `Delete ${applicationId}`, exact: true }).click();
+  await page.getByText('Showing 1–9 of 9 applications').waitFor();
+  assert.equal(await Application.findById(addedId), null);
+  checks.push('Final status locks further changes; deletion asks for confirmation and honours both cancellation and approval.');
+
+  await page.getByRole('link', { name: 'Add application', exact: true }).click();
+  await page.getByLabel('Company name *', { exact: true }).fill('INFOSYS');
+  await page.getByLabel('Job role *', { exact: true }).fill('frontend developer');
+  await page.getByLabel('Applied date *', { exact: true }).fill(daysAgo(-2));
+  await page.getByRole('button', { name: 'Save application', exact: true }).click();
+  await page.getByText('Choose a valid date that is not in the future.').waitFor();
+  await page.getByLabel('Applied date *', { exact: true }).fill(currentDay());
+  await page.getByRole('button', { name: 'Save application', exact: true }).click();
+  await page.getByText('You already have an active application for this company and role. Finish it before adding another.', { exact: true }).waitFor();
+  assert.equal(await page.getByLabel('Company name *', { exact: true }).inputValue(), 'INFOSYS');
+  checks.push('Frontend rejects future dates and displays a backend 409 duplicate message without clearing the form.');
+
+  for (let i = 0; i < 3; i++) await call('/applications', 'POST', { companyName: `Extra Company ${i}`, jobRole: 'Test pagination role', jobType: 'Contract', appliedDate: currentDay() });
+  await page.getByRole('link', { name: 'NextStep home', exact: true }).click();
+  await page.getByText('Showing 1–9 of 12 applications').waitFor();
+  await page.getByRole('button', { name: 'Next page', exact: true }).click();
+  await page.getByText('Showing 10–12 of 12 applications').waitFor();
+  await page.getByRole('button', { name: 'Previous page', exact: true }).click();
+  await page.getByText('Showing 1–9 of 12 applications').waitFor();
+  await page.getByLabel('Search by company').fill('no-matching-company');
+  await page.getByRole('button', { name: 'Search applications' }).click();
+  await page.getByRole('heading', { name: 'No matches this time.' }).waitFor();
+  await page.getByRole('button', { name: 'Clear filters' }).click();
+  await page.getByText('Showing 1–9 of 12 applications').waitFor();
+  checks.push('Pagination loads both pages; no-match search shows a helpful empty state.');
+
+  const listOnly = url => url.pathname === '/api/applications';
+  await page.route(listOnly, route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ success: false, message: 'Temporary test interruption. Please retry.', data: null }) }));
+  await page.reload();
+  await page.getByRole('heading', { name: 'A small detour.' }).waitFor();
+  await page.unroute(listOnly);
+  await page.getByRole('button', { name: 'Try again', exact: true }).click();
+  await page.getByText('Showing 1–9 of 12 applications').waitFor();
+  checks.push('A simulated API failure shows a retry control and retry recovers persisted results.');
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await capture('04-workspace-mobile.png');
+  await page.goto(`${origin}/applications/${seeded[2]._id}`);
+  await page.getByRole('heading', { name: 'Product Designer', exact: true }).waitFor();
+  await capture('05-details-mobile.png');
+  await page.reload();
+  await page.getByRole('heading', { name: 'Product Designer', exact: true }).waitFor();
+  await page.getByRole('link', { name: 'Edit details', exact: true }).click();
+  await page.getByRole('heading', { name: 'A little update.' }).waitFor();
+  await capture('06-edit-mobile.png');
+  checks.push('Dashboard, timeline, and form pass 390px layout/accessibility checks; detail deep-link refresh works.');
+
   assert.deepEqual(errors, []);
   await writeFile(new URL('browser.json', evidenceFolder), JSON.stringify({ runAt: new Date().toISOString(), database: 'isolated MongoDB 8.2.6 (not Atlas)', checks, scans, errors }, null, 2));
   console.log(`Passed ${checks.length} interface scenarios; screenshot accessibility checks passed.`);

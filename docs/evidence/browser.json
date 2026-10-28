@@ -1,11 +1,17 @@
 {
-  "runAt": "2026-10-28T04:38:10.335Z",
+  "runAt": "2026-10-28T04:47:37.185Z",
   "database": "isolated MongoDB 8.2.6 (not Atlas)",
   "checks": [
     "Workspace retrieves all six status counts and persisted application cards.",
     "Backend status filtering, company search, and overdue display work.",
     "Client validation prevents empty save; a valid application persists through the frontend.",
-    "Prefilled editing changes allowed fields and keeps the applied date disabled."
+    "Prefilled editing changes allowed fields and keeps the applied date disabled.",
+    "Only valid next statuses are offered; status changes persist with a visible timeline and disabled deletion in Interview/Offer.",
+    "Final status locks further changes; deletion asks for confirmation and honours both cancellation and approval.",
+    "Frontend rejects future dates and displays a backend 409 duplicate message without clearing the form.",
+    "Pagination loads both pages; no-match search shows a helpful empty state.",
+    "A simulated API failure shows a retry control and retry recovers persisted results.",
+    "Dashboard, timeline, and form pass 390px layout/accessibility checks; detail deep-link refresh works."
   ],
   "scans": [
     {
@@ -14,6 +20,22 @@
     },
     {
       "screen": "02-application-form.png",
+      "violations": []
+    },
+    {
+      "screen": "03-stage-timeline.png",
+      "violations": []
+    },
+    {
+      "screen": "04-workspace-mobile.png",
+      "violations": []
+    },
+    {
+      "screen": "05-details-mobile.png",
+      "violations": []
+    },
+    {
+      "screen": "06-edit-mobile.png",
       "violations": []
     }
   ],
