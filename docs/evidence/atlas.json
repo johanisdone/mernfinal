@@ -1,0 +1,14 @@
+{
+  "verified": true,
+  "runAt": "2026-10-28T04:57:34.359Z",
+  "database": "MongoDB Atlas / mernfinal_exam",
+  "checks": [
+    "Frontend create persisted to MongoDB Atlas, with backend ID, Applied status, history, and overdue date.",
+    "Prefilled frontend edit persisted to Atlas without changing issued ID or applied date.",
+    "Atlas-backed duplicate rule returned a visible form error for differently cased values.",
+    "Frontend stage updates and timeline persisted to Atlas; deletion during Interview was rejected.",
+    "A final status locked the workflow; confirmed frontend deletion removed the Atlas record."
+  ],
+  "pageErrors": [],
+  "fixtureCleanup": "Only the uniquely named verification fixture and counter were removed."
+}

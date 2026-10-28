@@ -1,0 +1,29 @@
+name: Verify NextStep
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  assessment-checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      MONGOMS_DISABLE_POSTINSTALL: "1"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:ui
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: nextstep-verification
+          path: |
+            docs/evidence/browser.json
+            docs/screenshots/

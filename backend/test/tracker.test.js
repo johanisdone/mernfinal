@@ -1,5 +1,6 @@
-import { before, after, beforeEach, test } from 'node:test';
+import { before, after, beforeEach, test as runTest } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdir, writeFile } from 'node:fs/promises';
 import mongoose from 'mongoose';
 import request from 'supertest';
 import { MongoMemoryServer } from 'mongodb-memory-server';
@@ -8,6 +9,10 @@ import { Application, CompanyCounter, prepareIndexes } from '../src/models/Appli
 import { currentDay, followUpFor } from '../src/domain/calendar.js';
 
 let database;
+const passed = [];
+function test(title, work) {
+  return runTest(title, async () => { await work(); passed.push(title); });
+}
 const app = makeServer();
 const sample = () => ({ companyName: 'Infosys', jobRole: 'Frontend Developer', jobType: 'Full-time', appliedDate: currentDay(), expectedSalary: 600000, notes: 'Applied through the careers page.' });
 before(async () => {
@@ -16,7 +21,13 @@ before(async () => {
   await prepareIndexes();
 });
 beforeEach(async () => { await Promise.all([Application.deleteMany({}), CompanyCounter.deleteMany({})]); });
-after(async () => { await mongoose.disconnect(); if (database) await database.stop(); });
+after(async () => {
+  await mongoose.disconnect();
+  if (database) await database.stop();
+  const directory = new URL('../../docs/evidence/', import.meta.url);
+  await mkdir(directory, { recursive: true });
+  await writeFile(new URL('api.json', directory), JSON.stringify({ runAt: new Date().toISOString(), database: 'isolated MongoDB 8.2.6 (not Atlas)', passed: passed.length, expected: 14, complete: passed.length === 14, checks: passed }, null, 2));
+});
 
 test('Creation generates immutable identity, initial history, and seven-day follow-up', async () => {
   const result = await request(app).post('/api/applications').send(sample()).expect(201);

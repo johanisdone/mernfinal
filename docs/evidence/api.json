@@ -1,0 +1,23 @@
+{
+  "runAt": "2026-10-28T04:54:39.486Z",
+  "database": "isolated MongoDB 8.2.6 (not Atlas)",
+  "passed": 14,
+  "expected": 14,
+  "complete": true,
+  "checks": [
+    "Creation generates immutable identity, initial history, and seven-day follow-up",
+    "Case-insensitive active duplicates return 409 and concurrent duplicate insertions stay unique",
+    "Company counters increase, stay separate, and avoid shared-prefix collisions",
+    "Future and impossible dates, negative salary, invalid job types, and client-generated fields are rejected",
+    "Company search and status filters combine, include literal regex text, and return counts for zero statuses",
+    "Overdue is calculated from dates and calendar arithmetic crosses month and leap-day boundaries",
+    "Every permitted workflow branch appends timestamped history; all final stages remain locked",
+    "Skipped, reverse, repeated, and client-forged status changes are rejected without changing history",
+    "Deletion is forbidden in Interview/Offer and allowed in Applied and every final stage",
+    "Editing changes permitted values but cannot alter applied date, issued ID, status, or history",
+    "Active duplicate edits fail; finalizing a record permits a fresh application with a higher sequence",
+    "Past applications lose overdue status after leaving Applied; follow-up day itself is not overdue",
+    "Concurrent status changes preserve a valid timeline without lost or duplicate events",
+    "Missing IDs, malformed JSON, and exhausted company numbers use consistent error envelopes"
+  ]
+}

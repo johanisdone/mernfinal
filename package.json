@@ -8,7 +8,8 @@
     "build": "npm run build -w frontend",
     "start": "npm start -w backend",
     "test": "npm test -w backend",
-    "test:ui": "node scripts/check-interface.mjs"
+    "test:ui": "node scripts/check-interface.mjs",
+    "verify:atlas": "node scripts/verify-atlas.mjs"
   },
   "engines": { "node": ">=22.12" },
   "devDependencies": {
